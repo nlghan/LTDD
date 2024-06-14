@@ -1,0 +1,267 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { StyleSheet, Text, TouchableHighlight, View, ScrollView } from 'react-native';
+
+interface Lap {
+  lapTime: string;
+  elapsedTime: string;
+}
+
+const App = (): React.JSX.Element => {
+  const [timeElapsed, setTimeElapsed] = useState("00:00,00");
+  const [running, setRunning] = useState(false);
+  const [startTime, setStartTime] = useState<Date | null>(null);
+  const [laps, setLaps] = useState<Lap[]>([]);
+  const [startStopText, setStartStopText] = useState('Start');
+  const [lapStartTime, setLapStartTime] = useState<Date | null>(null); // State to store lap start time
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Update lap time every second
+  useEffect(() => {
+    if (running) {
+      const interval = setInterval(() => {
+        if (startTime) {
+          const elapsed = getElapsedTime(startTime);
+          setTimeElapsed(elapsed);
+          // Update current lap time
+          setLaps((prevLaps) => {
+            if (prevLaps.length > 0) {
+              const updatedLaps = [...prevLaps];
+              const currentLapIndex = 0;
+              updatedLaps[currentLapIndex] = {
+                ...updatedLaps[currentLapIndex],
+                lapTime: getLapTime(),
+              };
+              return updatedLaps;
+            }
+            return prevLaps;
+          });
+        }
+      }, 30);
+      return () => clearInterval(interval);
+    }
+  }, [running, startTime]);
+
+  const handleStartPress = () => {
+    if (running && intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+      setRunning(false);
+      setStartTime(null);
+      setStartStopText('Start');
+      return;
+    }
+
+    const newStartTime = new Date();
+    const firstLap: Lap = {
+      lapTime: "00:00,00",
+      elapsedTime: timeElapsed,
+    };
+    setLaps([firstLap, ...laps]);
+    setStartTime(newStartTime);
+    setRunning(true);
+    setStartStopText('Stop');
+    intervalRef.current = setInterval(() => {
+      const elapsed = getElapsedTime(newStartTime);
+      setTimeElapsed(elapsed);
+    }, 30);
+
+    // Set lap start time when starting the timer
+    setLapStartTime(newStartTime);
+  };
+
+  const handleLapPress = () => {
+    if (!running || !lapStartTime) {
+      return;
+    }
+
+    const lapTime = getLapTime(); // Use lapStartTime to calculate lap time
+    const lap: Lap = {
+      lapTime,
+      elapsedTime: timeElapsed,
+    };
+
+    setLaps([lap, ...laps]);
+    // Reset lap start time to current time
+    setLapStartTime(new Date());
+  };
+
+  const handleResetPress = () => {
+    setLaps([]);
+    setTimeElapsed("00:00,00");
+    setStartTime(null);
+    setStartStopText('Start');
+    setLapStartTime(null); // Reset lap start time
+  };
+
+  const getElapsedTime = (startTime: Date) => {
+    const currentTime = new Date();
+    const elapsedTime = currentTime.getTime() - startTime.getTime();
+    const minutes = Math.floor((elapsedTime / (1000 * 60)) % 60);
+    const seconds = Math.floor((elapsedTime / 1000) % 60);
+    const milliseconds = Math.floor((elapsedTime % 1000) / 10);
+    return ${padNumber(minutes)}:${padNumber(seconds)},${padNumber(milliseconds, 2)};
+  };
+
+  const getLapTime = () => {
+    const currentTime = new Date();
+    const lapElapsedTime = currentTime.getTime() - (lapStartTime ? lapStartTime.getTime() : currentTime.getTime()); // Use lapStartTime to calculate lap time
+    const minutes = Math.floor((lapElapsedTime / (1000 * 60)) % 60);
+    const seconds = Math.floor((lapElapsedTime / 1000) % 60);
+    const milliseconds = Math.floor((lapElapsedTime % 1000) / 10);
+    return ${padNumber(minutes)}:${padNumber(seconds)},${padNumber(milliseconds, 2)};
+  };
+
+  const padNumber = (num: number, length = 2) => {
+    return num.toString().padStart(length, '0');
+  };
+
+  const lapOrResetButton = () => {
+    if (running) {
+      return (
+        <TouchableHighlight
+          style={[styles.btn, styles.resetButton]}
+          underlayColor="gray"
+          onPress={handleLapPress}
+          disabled={false}
+        >
+          <Text style={styles.textBtn}>Lap</Text>
+        </TouchableHighlight>
+      );
+    } else {
+      return (
+        <TouchableHighlight
+          style={[styles.btn, styles.resetButton]}
+          underlayColor="gray"
+          onPress={handleResetPress}
+          disabled={laps.length === 0}
+        >
+          <Text style={styles.textBtn}>Reset</Text>
+        </TouchableHighlight>
+      );
+    }
+  };
+
+  const renderLap = (lap: Lap, index: number) => {
+    const lapTimeInMilliseconds = lapTimeToMilliseconds(lap.lapTime);
+    const maxLapTime = Math.max(...laps.map((lap) => lapTimeToMilliseconds(lap.lapTime)));
+    const minLapTime = Math.min(...laps.map((lap) => lapTimeToMilliseconds(lap.lapTime)));
+
+    let lapColorStyle = {};
+    if (lapTimeInMilliseconds === maxLapTime) {
+      lapColorStyle = { color: 'red' };
+    } else if (lapTimeInMilliseconds === minLapTime) {
+      lapColorStyle = { color: 'green' };
+    }
+
+    return (
+      <View style={styles.lap} key={index}>
+        <Text style={[styles.textLap, lapColorStyle]}>Lap {laps.length - index}</Text>
+        <Text style={[styles.textLap, lapColorStyle]}>{lap.lapTime}</Text>
+      </View>
+    );
+  };
+
+  const lapTimeToMilliseconds = (lapTime: string) => {
+    const [minutesStr, rest] = lapTime.split(':');
+    const [secondsStr, millisecondsStr] = rest.split(',');
+    
+    const minutes = parseInt(minutesStr, 10);
+    const seconds = parseInt(secondsStr, 10);
+    const milliseconds = parseInt(millisecondsStr, 10);
+  
+    return (minutes * 60 + seconds) * 1000 + milliseconds;
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.textHeader}>{timeElapsed}</Text>
+      </View>
+      <View style={styles.wrapBtn}>
+        {lapOrResetButton()}
+        <TouchableHighlight
+          style={styles.btn}
+          underlayColor="gray"
+          onPress={handleStartPress}
+        >
+          <Text style={[styles.textBtn, running ? styles.stopText : styles.startText]}>{startStopText}</Text>
+        </TouchableHighlight>
+
+      </View>
+      <ScrollView contentContainerStyle={styles.scrollView}>
+        {laps.map(renderLap)}
+      </ScrollView>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: 'black',
+  },
+  header: {
+    marginTop: 100,
+    marginBottom: 100,
+    width: '100%',
+    alignItems: 'center',
+  },
+  textHeader: {
+    fontSize: 75,
+    color: 'white',
+  },
+  wrapBtn: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 30,
+    marginLeft: 25,
+    marginRight: 25,
+    
+  },
+  btn: {
+    borderColor: 'white',
+    borderRadius: 50,
+    borderWidth: 2,
+    height: 85,
+    width: 85,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor:'#736d6d69'
+  },
+  resetButton: {
+    backgroundColor: '#736d6d69',
+    color: 'white'
+  },
+  textBtn: {
+    fontSize: 17,
+    textAlign: 'center',
+    color: 'white'
+  },
+  startText: {
+    color: 'green',
+  },
+  stopText: {
+    color: 'red',
+  },
+  lap: {
+    // backgroundColor: 'lightgray',
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    height: 70,
+    alignItems: 'center',
+  },
+  textLap: {
+    fontSize: 20,
+    color: 'white',
+  },
+  disabledButton: {
+    opacity: 0.5, // Opacity để làm mờ nút khi disabled
+  },
+  scrollView: {
+    flexGrow: 1,
+    justifyContent: 'flex-start',
+  },
+});
+
+export default App; 

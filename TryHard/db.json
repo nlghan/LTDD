@@ -1,0 +1,8 @@
+{
+    "tb_users": [
+      { "id": "1", "username": "admin", "password": "123" },
+      { "id": "2", "username": "giahan", "password": "123" }
+    ],
+    "tb_posts":[]
+    
+  }
